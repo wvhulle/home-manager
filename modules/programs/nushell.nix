@@ -9,6 +9,18 @@ let
   inherit (lib.hm.nushell) isNushellInline toNushell;
   cfg = config.programs.nushell;
 
+  # home.sessionVariables live in a POSIX hm-session-vars.sh that nushell, being
+  # non-POSIX, never sources. Translate the attrset into env.nu directly (nushell
+  # loads env.nu before config.nu). PATH is skipped: nushell's $env.PATH is a list,
+  # not a string, and home.sessionPath is the right mechanism for it. Values are
+  # emitted as nushell literals -- POSIX $VAR references are NOT expanded (unlike
+  # fish/babelfish) and home.sessionVariablesExtra is not translated.
+  sessionVars = removeAttrs config.home.sessionVariables [ "PATH" ];
+  sessionVarsStr = lib.concatLines (
+    lib.mapAttrsToList (name: value: "$env.${name} = ${toNushell { } value}") sessionVars
+  );
+  hasSessionVars = sessionVars != { };
+
   linesOrSource =
     name:
     types.submodule (
@@ -279,9 +291,11 @@ in
         }
       )
 
-      (lib.mkIf (cfg.envFile != null || cfg.extraEnv != "") {
+      (lib.mkIf (cfg.envFile != null || cfg.extraEnv != "" || hasSessionVars) {
         "${cfg.configDir}/env.nu".text = lib.mkMerge [
           (lib.mkIf (cfg.envFile != null) cfg.envFile.text)
+          # Before extraEnv so a user's extraEnv can still override these.
+          (lib.mkIf hasSessionVars sessionVarsStr)
           cfg.extraEnv
         ];
       })

@@ -7,6 +7,13 @@
 }:
 
 {
+  home.sessionVariables = {
+    EDITOR = "nvim";
+    COUNT = 3;
+    # Skipped: nushell's $env.PATH is a list, not a string.
+    PATH = "/should/not/appear";
+  };
+
   programs.nushell = {
     enable = true;
     package = realPkgs.nushell;
@@ -74,9 +81,20 @@
       assertFileContent \
         "${configDir}/config.nu" \
         ${./config-expected.nu}
-      assertFileContent \
+      assertFileContains \
         "${configDir}/env.nu" \
-        ${./env-expected.nu}
+        '$env.FOO ='
+      # home.sessionVariables are translated into env.nu ...
+      assertFileContains \
+        "${configDir}/env.nu" \
+        '$env.EDITOR = "nvim"'
+      assertFileContains \
+        "${configDir}/env.nu" \
+        '$env.COUNT = 3'
+      # ... except PATH, which is a list in nushell and must not be clobbered.
+      assertFileNotRegex \
+        "${configDir}/env.nu" \
+        '\$env\.PATH'
       assertFileContent \
         "${configDir}/login.nu" \
         ${./login-expected.nu}
